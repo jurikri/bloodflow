@@ -356,7 +356,7 @@ ax2.axis("off")
 #%% toy sample - test1
 
 
-def ms_toy_img_gen(angle=None, width=30, line_resolution=3):
+def ms_toy_img_gen(angle=None, width=30, line_resolution=10):
     import numpy as np
     from PIL import Image 
     hw = int(width / np.sqrt(2) / 2)
@@ -372,35 +372,37 @@ def ms_toy_img_gen(angle=None, width=30, line_resolution=3):
     return crop
 
 def ms_randon_transform(img=None):
-    ar = 10
-    angle_list = np.arange(30, 200.0001, ar)
-    stdsave = []
+    ar = 7
+    angle_list = np.arange(0, 180, ar)
+    # stdsave = []
     crop = np.array(img)
-    for ro in angle_list:
-        
-        crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
-        rotate_img = crop_img.rotate(ro)
-        rotate_img_array = np.array(rotate_img, dtype=float)
-        crop2 = np.array(rotate_img_array)
-        
-        theta = np.linspace(0., 180., max(crop2.shape), endpoint=False)
-        sinogram = radon(crop2, theta=theta)
-        score = np.nanstd(sinogram) / np.nanstd(crop2)
-        stdsave.append(score)
     
-    return angle_list, stdsave
+    crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
+    rotate_img = crop_img
+    rotate_img_array = np.array(rotate_img, dtype=float)
+    crop2 = np.array(rotate_img_array)
+    
+    theta = np.linspace(0., 180., max(crop2.shape), endpoint=False)
+    sinogram = radon(crop2, theta=theta)
+    score = np.std(sinogram, axis=0)
+    
+    xaxis = msFunction.downsampling(theta, len(angle_list))[0]
+    yaxis = msFunction.downsampling(score, len(angle_list))[0]
+    # plt.plot(xaxis, yaxis)
+
+    return xaxis, yaxis
 
 def ms_ng_angle_method(img=None):
     import numpy as np
     
-    ar = 10
-    angle_list = np.arange(30, 200.0001, ar)
+    ar = 7
+    angle_list = np.arange(0, 180, ar)
     stdsave = []
     crop = np.array(img)
     for ro in angle_list:
         
         crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
-        rotate_img = crop_img.rotate(ro)
+        rotate_img = crop_img.rotate(-ro)
         rotate_img_array = np.array(rotate_img, dtype=float)
         crop2 = np.array(rotate_img_array)
         
@@ -410,9 +412,10 @@ def ms_ng_angle_method(img=None):
         
     stdsave = np.array(stdsave)
     ws = int(round(31 * (0.1 / ar)))
-    if ws > 0:
-        smooth = np.convolve(stdsave2, np.ones((ws,))/ws, mode='valid')
-        stdsave_smooth = np.zeros(stdsave2.shape)
+    
+    if ws > 0 and False:
+        smooth = np.convolve(stdsave, np.ones((ws,))/ws, mode='valid')
+        stdsave_smooth = np.zeros(stdsave.shape)
         stdsave_smooth[int(ws/2):int(ws/2)+len(smooth)] = smooth
     else: stdsave_smooth = np.array(stdsave)
     
@@ -428,11 +431,11 @@ def ms_minmax(X): # [0,1]
     return X_scaled
 
 
-time_resolution = 10
+time_resolution = 5
 angle_list = np.arange(30, 200.0001, time_resolution)
 
-ro = 40
-img = ms_toy_img_gen(angle=ro)
+ro = 60
+img = ms_toy_img_gen(angle=ro, width=200, line_resolution=4)
 plt.imshow(img)
 
 xaxis, stdsave = ms_randon_transform(img=img)
@@ -458,7 +461,7 @@ xaxis, stdsave = ms_randon_transform(img=img)
 angle_list, stdsave_smooth = ms_ng_angle_method(img=img)
 
 plt.figure()
-plt.plot(xaxis, ms_minmax(stdsave_smooth), label = 'ngangle')
+plt.plot(angle_list, ms_minmax(stdsave_smooth), label = 'ngangle')
 plt.plot(xaxis, ms_minmax(stdsave), label = 'randon')
 plt.legend()
 
@@ -480,6 +483,38 @@ plt.figure()
 plt.plot(xaxis, ms_minmax(stdsave_smooth), label = 'ngangle')
 plt.plot(xaxis, ms_minmax(stdsave), label = 'randon')
 plt.legend()
+
+
+# test4
+
+
+test_img2 = test_img[w*n:w*(n+1)+150,:]
+plt.imshow(test_img2)
+
+img = np.array(test_img2)
+xaxis, stdsave = ms_randon_transform(img=img)
+angle_list, stdsave_smooth = ms_ng_angle_method(img=img)
+
+plt.figure()
+plt.plot(xaxis, ms_minmax(stdsave_smooth), label = 'ngangle')
+plt.plot(xaxis, ms_minmax(stdsave), label = 'randon')
+plt.legend()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
