@@ -22,15 +22,6 @@ sys.path.append('C:\\mscode')
 import msFunction
 import pickle
 
-# filepath = 'C:\\Temp\\Image5_ time series_ spon_line scan_Galvano.tif'
-
-filepath = 'D:\\HR_bloodflow\\STZ\\3C1\\' + '3C1_Image2_line scan.bmp'
-
-filepath = 'D:\\HR_bloodflow\\STZ\\3C1\\' + '3C1_Image3_line scan.bmp'
-
-filepath = 'D:\\HR_bloodflow\\STZ\\3C1\\' + '3C1_Image7_line scan.bmp'
-
-
 #%% auto filepath
 
 path = 'D:\\HR_bloodflow\\'
@@ -49,76 +40,102 @@ for (path, dir, files) in os.walk("D:/"):
 mssave = msFunction.msarray([len(total_path)])
 
 for i in tqdm(range(0, len(total_path))):
-
+    
+    #%%
+    i += 1
+    
     filepath = total_path[i][0]
     img0 = io.imread(filepath) # 3 dimensions : frames x width x height
     if img0.shape[0] < img0.shape[1]: img0 = np.transpose(img0)
-    
-    # plt.imshow(img0)
-    
-    if False:
-        for j in range(5):
-            plt.figure(); plt.imshow(img0[int(img0.shape[1]*(7*j)):int(img0.shape[1]*(7*(j+1))), :])
+    print(filepath)
+    if True:
+        for j in range(30):
+            h = 10
+            plt.figure(); 
+            plt.title(str(i) +'_'+ str(j))
+            plt.imshow(img0[int(img0.shape[1]*(h*j) + (1000*j)):int(img0.shape[1]*(h*(j+1)) + (1000*j)), :])
             
+            
+            #%%
     width = img0.shape[1]
     bins = int(width/2)
     msbins = np.arange(0, img0.shape[0]-bins+1, bins, dtype=int)
     peak_save = []
     
-    method1 = False
-    method2 = True
-    
+    # method1 = False
+    # method2 = True
+    row = msbins[455]
     for row in msbins:
-        stdsave, stdsave2 = [], []
-        resolution = 1
-        angle_list = np.arange(0, 180.0001, resolution)
-        figsw = False
-        for ro in angle_list:
-            crop = img0[row :row + width, :]
-            crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
-            rotate_img = crop_img.rotate(ro)
-            rotate_img_array = np.array(rotate_img, dtype=float)
-            
-            crop2 = np.array(rotate_img_array)
-            
-            if np.isnan(np.mean(crop2)): print('nan')
-            
-            # method1
-            if method1:
-                theta = np.linspace(0., 180., max(crop2.shape), endpoint=False)
-                sinogram = radon(crop2, theta=theta)
-                score = np.std(sinogram) / np.std(crop2)
-                stdsave.append(score)
-            
-            # method2
-            
-            mean_trace = np.nanmean(crop2, axis=0)
-            formula2 = np.std(mean_trace)
-            stdsave2.append(formula2)
-            
-        if method1:
-            stdsave = np.array(stdsave)
-            ws = int(round(31 * (0.1 / resolution)))
-            smooth = np.convolve(stdsave, np.ones((ws,))/ws, mode='valid')
-            stdsave_smooth = np.zeros(stdsave.shape)
-            stdsave_smooth[int(ws/2):int(ws/2)+len(smooth)] = smooth
-            plt.figure()
-            plt.plot(stdsave[1:-1])
-            plt.plot(stdsave_smooth[1:-1])
-            
-        if method2:
-            stdsave2 = np.array(stdsave2)
-            ws = int(round(31 * (0.1 / resolution)))
-            smooth = np.convolve(stdsave2, np.ones((ws,))/ws, mode='valid')
-            stdsave_smooth = np.zeros(stdsave2.shape)
-            stdsave_smooth[int(ws/2):int(ws/2)+len(smooth)] = smooth
-            
-        mix = np.argmax(stdsave_smooth)
-        ms_angle = angle_list[mix]
-        ms_value = stdsave2[mix]
         
-        peak_save.append([ms_angle, ms_value])
+        
+        # stdsave, stdsave2 = [], []
+
+        
+        
+        crop = img0[row :row + width*5, :]
+        crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
+        rotate_img = crop_img
+        rotate_img_array = np.array(rotate_img, dtype=float)
+        crop2 = np.array(rotate_img_array)
+        
+        angle_list = np.linspace(0., 180., crop2.shape[0], endpoint=False)
+        sinogram = radon(crop2, theta=angle_list)
+        score = np.std(sinogram, axis=0)
+        
+        # xaxis = msFunction.downsampling(angle_list, len(angle_list))[0]
+        # yaxis = msFunction.downsampling(score, len(angle_list))[0]
+        
+        if False:
+            plt.figure(); plt.imshow(crop)
+            plt.figure(); plt.plot(angle_list, score)
+        
+        mix = np.argmax(score)
+        ms_angle = angle_list[mix]
+        peak_save.append([ms_angle, np.max(score)])
+        
+        # figsw = False
+        
+        
+        def ms_ng_angle_method(img=None, angle_list=None):
+            import numpy as np
+
+            stdsave = []
+            crop = np.array(img)
+            for ro in angle_list:
+                
+                crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
+                rotate_img = crop_img.rotate(-ro)
+                rotate_img_array = np.array(rotate_img, dtype=float)
+                crop2 = np.array(rotate_img_array)
+                
+                mean_trace = np.nanmean(crop2, axis=0)
+                formula2 = np.std(mean_trace)
+                stdsave.append(formula2)
+                
+            stdsave = np.array(stdsave)
+
+            return angle_list, stdsave
+        
+        angle_list, stdsave = ms_ng_angle_method(img=crop, angle_list=angle_list)
+        
+        if False:
+            plt.figure(); plt.imshow(crop)
+            plt.figure();
+            
+            plt.plot(angle_list, msFunction.ms_minmax(stdsave))
+            plt.plot(angle_list, msFunction.ms_minmax(score))
+    
+            
+        # mix = np.argmax(stdsave_smooth)
+        # ms_angle = angle_list[mix]
+        # ms_value = stdsave2[mix]
+        
+        # peak_save.append([ms_angle, ms_value])
     peak_save = np.array(peak_save)
+    
+    plt.plot(peak_save[:,0][:1000])
+    
+    plt.plot(peak_save[:,1][:1000])
 
     median_angle = np.median(np.abs(peak_save[:,0] - 90))
     print(median_angle)
