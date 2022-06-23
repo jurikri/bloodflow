@@ -35,44 +35,31 @@ for (path, dir, files) in os.walk("D:/"):
             filepath = path + '//' + filename
             total_path.append([filepath, path[16:19]])
 
-#%%        
-
+#%%  XYZ gen  
+X, Y, Z = [], [] ,[]
 mssave = msFunction.msarray([len(total_path)])
-
 for i in tqdm(range(0, len(total_path))):
-    
-    #%%
-    i += 1
-    
     filepath = total_path[i][0]
     img0 = io.imread(filepath) # 3 dimensions : frames x width x height
     if img0.shape[0] < img0.shape[1]: img0 = np.transpose(img0)
-    print(filepath)
-    if True:
-        for j in range(30):
+    
+    # print(filepath)
+    if False:
+        for j in range(1):
             h = 10
             plt.figure(); 
             plt.title(str(i) +'_'+ str(j))
             plt.imshow(img0[int(img0.shape[1]*(h*j) + (1000*j)):int(img0.shape[1]*(h*(j+1)) + (1000*j)), :])
             
-            
-            #%%
+        
     width = img0.shape[1]
     bins = int(width/2)
     msbins = np.arange(0, img0.shape[0]-bins+1, bins, dtype=int)
     peak_save = []
     
-    # method1 = False
-    # method2 = True
-    row = msbins[455]
     for row in msbins:
         
-        
-        # stdsave, stdsave2 = [], []
-
-        
-        
-        crop = img0[row :row + width*5, :]
+        crop = img0[row :row + width, :]
         crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
         rotate_img = crop_img
         rotate_img_array = np.array(rotate_img, dtype=float)
@@ -91,71 +78,43 @@ for i in tqdm(range(0, len(total_path))):
         
         mix = np.argmax(score)
         ms_angle = angle_list[mix]
-        peak_save.append([ms_angle, np.max(score)])
         
-        # figsw = False
+        mix = np.argsort(score)[::-1]
+        signal = np.mean(score[mix[:3]])
+        noise = np.mean(score[mix[3:]])
+        snr = signal/noise
         
+        peak_save.append([ms_angle, np.max(score), snr])
         
-        def ms_ng_angle_method(img=None, angle_list=None):
-            import numpy as np
-
-            stdsave = []
-            crop = np.array(img)
-            for ro in angle_list:
-                
-                crop_img = Image.fromarray(crop / np.mean(crop, axis=0) - 1)
-                rotate_img = crop_img.rotate(-ro)
-                rotate_img_array = np.array(rotate_img, dtype=float)
-                crop2 = np.array(rotate_img_array)
-                
-                mean_trace = np.nanmean(crop2, axis=0)
-                formula2 = np.std(mean_trace)
-                stdsave.append(formula2)
-                
-            stdsave = np.array(stdsave)
-
-            return angle_list, stdsave
+        X.append(crop)
+        Y.append(ms_angle)
+        Z.append([i, np.max(score), snr])
         
-        angle_list, stdsave = ms_ng_angle_method(img=crop, angle_list=angle_list)
-        
-        if False:
-            plt.figure(); plt.imshow(crop)
-            plt.figure();
-            
-            plt.plot(angle_list, msFunction.ms_minmax(stdsave))
-            plt.plot(angle_list, msFunction.ms_minmax(score))
-    
-            
-        # mix = np.argmax(stdsave_smooth)
-        # ms_angle = angle_list[mix]
-        # ms_value = stdsave2[mix]
-        
-        # peak_save.append([ms_angle, ms_value])
     peak_save = np.array(peak_save)
-    
-    plt.plot(peak_save[:,0][:1000])
-    
-    plt.plot(peak_save[:,1][:1000])
-
-    median_angle = np.median(np.abs(peak_save[:,0] - 90))
-    print(median_angle)
     msid = os.path.basename(filepath)[:-4]
     mssave[i] = [peak_save, msid]
     
     if False:
+        median_angle = np.median(np.abs(peak_save[:,0] - 90))
+        print(median_angle)
         plt.figure();
         plt.title(str(i) + '_' +  filepath)
         plt.scatter(list(range(len(peak_save[:,0]))), np.abs(peak_save[:,0] - 90), s=5)
         plt.plot(np.ones(len(peak_save[:,0])) * median_angle, c='r')
 
-#%%
 psave = 'D:\\HR_bloodflow\\blood_flow_save.pickle'
 if not(os.path.isfile(psave)) or True:
     with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
         pickle.dump(mssave, f, pickle.HIGHEST_PROTOCOL)
         print(psave, '저장되었습니다.')
-    
 
+msdict = {'X':X, 'Y':Y, 'Z':Z}        
+psave = 'D:\\HR_bloodflow\\blood_flow_save_XYZ.pickle'
+if not(os.path.isfile(psave)) or True:
+    with open(psave, 'wb') as f:  # Python 3: open(..., 'rb')
+        pickle.dump(msdict, f, pickle.HIGHEST_PROTOCOL)
+        print(psave, '저장되었습니다.')
+    
 #%% vis
 psave = 'D:\\HR_bloodflow\\blood_flow_save.pickle'
 with open(psave, 'rb') as file:
@@ -170,6 +129,162 @@ for i in range(len(mssave)):
     plt.title(str(i) + '_' +  filepath)
     plt.scatter(list(range(len(peak_save[:,0]))), np.abs(peak_save[:,0] - 90), s=5)
     plt.plot(np.ones(len(peak_save[:,0])) * median_angle, c='r')
+
+#%% keras setup
+import tensorflow as tf
+from tensorflow.keras import datasets, layers, models, regularizers
+from tensorflow.keras.layers import BatchNormalization, Dropout
+from tensorflow.keras.optimizers import Adam
+
+def model_setup(xs=None, lr=1e-4):
+    
+    # import tensorflow as tf
+    # from tensorflow.keras import datasets, layers, models, regularizers
+    # from tensorflow.keras.layers import BatchNormalization, Dropout
+    ln = 2**10
+    
+    model = models.Sequential()
+    model.add(layers.Conv2D(2**5, (6, 6), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(ln, (4, 4), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(ln, (4, 4), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(ln, (4, 4), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(int(ln/2), (4, 4), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(int(ln/4), (4, 4), activation='relu', input_shape=xs))
+    
+    # model.add(layers.Conv2D(2**ln, (5, 5), activation='relu', input_shape=xs))
+    # # model.add(layers.MaxPooling2D((2, 2)))
+    # model.add(layers.Conv2D(2**ln, (5, 5), activation='relu', input_shape=xs))
+    # model.add(layers.Conv2D(2**ln, (5, 5), activation='relu', input_shape=xs))
+    # model.add(layers.MaxPooling2D((2, 2)))
+    
+    model.add(layers.Flatten())
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(ln, activation='relu' ))
+    model.add(layers.Dense(2**8, activation='linear' ))
+    model.add(layers.Dense(2**7, activation='linear' ))
+    model.add(layers.Dense(2**6, activation='linear' ))
+    model.add(layers.Dense(2**5, activation='linear' ))
+
+    model.add(layers.Dense(1, activation='linear' ))
+
+    model.compile(optimizer=Adam(learning_rate=lr, decay=1e-3, beta_1=0.9, beta_2=0.999), \
+                  loss='mse') 
+    
+    return model
+
+
+psave = 'D:\\HR_bloodflow\\blood_flow_save_XYZ.pickle'
+with open(psave, 'rb') as file:
+    msdict = pickle.load(file)
+    X = msdict['X']
+    Y = msdict['Y']
+    Z = msdict['Z']
+
+# X 이미지 크기 균일화
+
+shape_save = []
+for i in range(len(X)):
+    shape_save.append([X[i].shape[0], X[i].shape[1]])
+shape_save = np.array(shape_save)
+vix = shape_save[:,0]==shape_save[:,1]
+shape_save = shape_save[vix]
+print(np.min(shape_save, axis=0))
+msize = np.min(shape_save, axis=0)[0]
+
+X2, Y2, Z2 = [], [], []
+from PIL import Image 
+for i in tqdm(np.where(vix)[0]):
+    if X[i].shape[0] != msize:
+        img = Image.fromarray(X[i])
+        img = img.resize((msize, msize))
+        img2 = np.array(img)
+    else:
+        img2 = np.array(X[i])
+        
+    img3 = np.reshape(img2, (msize,msize,1))
+    X2.append(img3)
+    Y2.append(Y[i])
+    Z2.append(Z[i])
+# X reshape
+
+
+model = model_setup(xs=X2[0].shape)
+print(model.summary())
+
+#%% quality filter
+X2, Y2, Z2 = np.array(X2), np.array(Y2), np.array(Z2)
+
+mid = np.median(Z2[:,2])
+vix = np.where(Z2[:,2] > mid)[0]
+print(len(vix)/len(Z2))
+
+X3, Y3, Z3 = X2[vix], Y2[vix], Z2[vix]
+
+import gc
+gc.collect()
+tf.keras.backend.clear_session()
+model = model_setup(xs=X2[0].shape)
+hist = model.fit(X3, Y3, epochs=1000, verbose=1, batch_size = 2**6)
+
+
+#%% 중간층 확인
+
+mix = np.argsort(Z3[:,2])[::-1]
+
+n = mix[8000]
+print(n)
+plt.figure()
+plt.imshow(X3[n][:,:,0])
+
+intermediate_layer_model = tf.keras.Model(inputs=model.input, outputs=model.layers[0].output)
+intermediate_output = intermediate_layer_model(np.array([X3[n]]))
+msout = intermediate_output
+print('msout.shape', msout.shape)
+
+for i in range(30):
+    plt.figure()
+    plt.imshow(msout[0,:,:,i])
+    plt.title(str(i))
+    
+#%%
+i = 0
+from scipy.stats import mode
+
+angle_save = [] 
+for i in range(msout.shape[3]):
+    crop2 = np.array(msout[0,:,:,i])
+    if np.mean(crop2) != 0:
+        angle_list = np.linspace(0., 180., crop2.shape[0], endpoint=False)
+        sinogram = radon(crop2, theta=angle_list)
+        score = np.std(sinogram, axis=0)
+        
+        mix = np.argsort(score)[::-1]
+        signal = np.mean(score[mix[:3]])
+        noise = np.mean(score[mix[3:]])
+        snr = signal/noise
+
+        angle_save.append(score)
+angle_save = np.array(angle_save)
+# plt.imshow(angle_save)
+
+
+
+score = np.mean(angle_save, axis=0)
+plt.plot(score)
+
+mix = np.argsort(score)[::-1]
+signal = np.mean(score[mix[:3]])
+noise = np.mean(score[mix[3:]])
+snr = signal/noise
+maxix = np.argmax(score)
+ms_angle = angle_list[maxix]
+
+print('np.mean(angle_save)', ms_angle, snr)
+print('ground truth', Y3[n], Z3[n,2])
 
 #%% grouping
 import pandas as pd
